@@ -1,5 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Head from 'next/head'
+import { customAlphabet } from 'nanoid'
+
+const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+const nanoid = customAlphabet(alphabet, 6)
 
 export default function Home() {
   const [url, setUrl] = useState('')
@@ -7,6 +11,15 @@ export default function Home() {
   const [shortUrl, setShortUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [urls, setUrls] = useState([])
+
+  // Load URLs from localStorage on component mount
+  useEffect(() => {
+    const savedUrls = localStorage.getItem('shortenedUrls')
+    if (savedUrls) {
+      setUrls(JSON.parse(savedUrls))
+    }
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -14,24 +27,59 @@ export default function Home() {
     setError('')
     
     try {
-      const response = await fetch('/api/shorten', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url, slug }),
-      })
-      
-      const data = await response.json()
-      if (data.success) {
-        setShortUrl(data.shortUrl)
-        setUrl('')
-        setSlug('')
-      } else {
-        setError(data.message || 'Error creating short URL')
+      // Validate URL
+      if (!url) {
+        setError('URL is required')
+        setLoading(false)
+        return
       }
+
+      try {
+        new URL(url)
+      } catch (error) {
+        setError('Invalid URL format. Please include http:// or https://')
+        setLoading(false)
+        return
+      }
+
+      let finalSlug = slug || nanoid()
+
+      // Validate slug format
+      if (finalSlug && !/^[a-zA-Z0-9-_]+$/.test(finalSlug)) {
+        setError('Slug can only contain letters, numbers, hyphens and underscores')
+        setLoading(false)
+        return
+      }
+
+      // Check if slug already exists
+      const existingUrl = urls.find(u => u.slug === finalSlug)
+      if (existingUrl) {
+        setError('This slug is already taken. Please choose a different one.')
+        setLoading(false)
+        return
+      }
+
+      // Create new URL object
+      const newUrl = {
+        id: Date.now().toString(),
+        url: url,
+        slug: finalSlug,
+        clicks: 0,
+        createdAt: new Date().toISOString(),
+        shortUrl: `${window.location.origin}/${finalSlug}`
+      }
+
+      // Add to URLs list
+      const updatedUrls = [...urls, newUrl]
+      setUrls(updatedUrls)
+      localStorage.setItem('shortenedUrls', JSON.stringify(updatedUrls))
+
+      setShortUrl(newUrl.shortUrl)
+      setUrl('')
+      setSlug('')
+      
     } catch (error) {
-      setError('Network error. Please try again.')
+      setError('An error occurred. Please try again.')
     }
     
     setLoading(false)
@@ -53,7 +101,7 @@ export default function Home() {
       <main>
         <div className="header">
           <h1>🚀 URL Shortener</h1>
-          <p>Shorten your long URLs instantly</p>
+          <p>Shorten your long URLs instantly - No Database Required</p>
         </div>
         
         <form onSubmit={handleSubmit} className="url-form">
@@ -118,11 +166,11 @@ export default function Home() {
             </div>
             <div className="feature">
               <span>🔒</span>
-              <p>Secure & reliable</p>
+              <p>No Database Required</p>
             </div>
             <div className="feature">
-              <span>📊</span>
-              <p>Click tracking</p>
+              <span>💾</span>
+              <p>Local Storage</p>
             </div>
             <div className="feature">
               <span>🎯</span>
@@ -130,6 +178,28 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* Recent URLs */}
+        {urls.length > 0 && (
+          <div className="recent-urls">
+            <h3>📝 Recently Shortened URLs</h3>
+            <div className="urls-list">
+              {urls.slice(-5).reverse().map((item) => (
+                <div key={item.id} className="url-item">
+                  <div className="url-info">
+                    <a href={item.shortUrl} target="_blank" rel="noopener noreferrer" className="short">
+                      {item.slug}
+                    </a>
+                    <span className="clicks">👆 {item.clicks} clicks</span>
+                  </div>
+                  <div className="original-url" title={item.url}>
+                    {item.url.length > 50 ? item.url.substring(0, 50) + '...' : item.url}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
 
       <footer>
@@ -176,7 +246,7 @@ export default function Home() {
         }
 
         .header p {
-          font-size: 1.2rem;
+          font-size: 1.1rem;
           opacity: 0.9;
         }
 
@@ -313,6 +383,7 @@ export default function Home() {
           text-align: center;
           color: white;
           width: 100%;
+          margin-bottom: 2rem;
         }
 
         .feature-grid {
@@ -333,6 +404,57 @@ export default function Home() {
           font-size: 1.5rem;
           display: block;
           margin-bottom: 0.5rem;
+        }
+
+        .recent-urls {
+          background: white;
+          padding: 1.5rem;
+          border-radius: 15px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+          width: 100%;
+        }
+
+        .recent-urls h3 {
+          margin-bottom: 1rem;
+          color: #333;
+          text-align: center;
+        }
+
+        .urls-list {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .url-item {
+          padding: 1rem;
+          border: 1px solid #e1e5e9;
+          border-radius: 8px;
+          background: #f8f9fa;
+        }
+
+        .url-info {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.5rem;
+        }
+
+        .url-info .short {
+          color: #667eea;
+          text-decoration: none;
+          font-weight: 600;
+        }
+
+        .url-info .clicks {
+          font-size: 0.8rem;
+          color: #666;
+        }
+
+        .original-url {
+          font-size: 0.9rem;
+          color: #666;
+          word-break: break-all;
         }
 
         footer {
@@ -377,6 +499,12 @@ export default function Home() {
           
           .short-url-container {
             flex-direction: column;
+          }
+          
+          .url-info {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
           }
         }
       `}</style>
