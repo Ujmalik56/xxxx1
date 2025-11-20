@@ -6,7 +6,7 @@ const ADMIN_PASSWORD = 'admin123456'
 
 export default function Admin() {
   const [urls, setUrls] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -16,30 +16,25 @@ export default function Admin() {
     const auth = localStorage.getItem('adminAuth')
     if (auth === 'true') {
       setIsAuthenticated(true)
-      fetchUrls()
-    } else {
-      setLoading(false)
+      loadUrls()
     }
   }, [])
 
-  const fetchUrls = async () => {
+  const loadUrls = () => {
+    setLoading(true)
     try {
-      const response = await fetch('/api/urls')
-      const data = await response.json()
-      if (data.success) {
-        setUrls(data.urls)
-        
-        // Calculate stats
-        const total = data.urls.length
-        const totalClicks = data.urls.reduce((sum, url) => sum + url.clicks, 0)
-        setStats({ total, totalClicks })
-      }
+      const savedUrls = localStorage.getItem('shortenedUrls')
+      const urlsData = savedUrls ? JSON.parse(savedUrls) : []
+      setUrls(urlsData)
+      
+      // Calculate stats
+      const total = urlsData.length
+      const totalClicks = urlsData.reduce((sum, url) => sum + url.clicks, 0)
+      setStats({ total, totalClicks })
     } catch (error) {
-      console.error('Error fetching URLs:', error)
-      alert('Error loading URLs')
-    } finally {
-      setLoading(false)
+      console.error('Error loading URLs:', error)
     }
+    setLoading(false)
   }
 
   const handleLogin = (e) => {
@@ -47,34 +42,42 @@ export default function Admin() {
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
       setIsAuthenticated(true)
       localStorage.setItem('adminAuth', 'true')
-      fetchUrls()
+      loadUrls()
     } else {
       alert('❌ Invalid credentials!')
     }
   }
 
-  const handleDelete = async (slug) => {
+  const handleDelete = (id) => {
     if (confirm('⚠️ Are you sure you want to delete this URL?')) {
       try {
-        const response = await fetch('/api/urls', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ slug }),
-        })
+        const updatedUrls = urls.filter(url => url.id !== id)
+        setUrls(updatedUrls)
+        localStorage.setItem('shortenedUrls', JSON.stringify(updatedUrls))
         
-        const data = await response.json()
-        if (data.success) {
-          setUrls(urls.filter(url => url.slug !== slug))
-          setStats(prev => ({
-            total: prev.total - 1,
-            totalClicks: prev.totalClicks - urls.find(u => u.slug === slug)?.clicks || 0
-          }))
-          alert('✅ URL deleted successfully!')
-        }
+        // Update stats
+        const deletedUrl = urls.find(url => url.id === id)
+        setStats(prev => ({
+          total: prev.total - 1,
+          totalClicks: prev.totalClicks - (deletedUrl?.clicks || 0)
+        }))
+        
+        alert('✅ URL deleted successfully!')
       } catch (error) {
         alert('❌ Error deleting URL')
+      }
+    }
+  }
+
+  const handleDeleteAll = () => {
+    if (confirm('⚠️ Are you sure you want to delete ALL URLs? This action cannot be undone.')) {
+      try {
+        setUrls([])
+        localStorage.setItem('shortenedUrls', JSON.stringify([]))
+        setStats({ total: 0, totalClicks: 0 })
+        alert('✅ All URLs deleted successfully!')
+      } catch (error) {
+        alert('❌ Error deleting URLs')
       }
     }
   }
@@ -233,9 +236,14 @@ export default function Admin() {
               <span className="stat-label">Total Clicks</span>
             </div>
           </div>
-          <button onClick={handleLogout} className="logout-btn">
-            🚪 Logout
-          </button>
+          <div className="header-actions">
+            <button onClick={handleDeleteAll} className="delete-all-btn">
+              🗑️ Delete All
+            </button>
+            <button onClick={handleLogout} className="logout-btn">
+              🚪 Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -244,7 +252,7 @@ export default function Admin() {
           <div className="loading">⏳ Loading URLs...</div>
         ) : (
           <div className="urls-section">
-            <h2>📊 All Short URLs</h2>
+            <h2>📊 All Short URLs ({urls.length})</h2>
             
             {urls.length === 0 ? (
               <div className="empty-state">
@@ -264,10 +272,10 @@ export default function Admin() {
                   </thead>
                   <tbody>
                     {urls.map((url) => (
-                      <tr key={url._id}>
+                      <tr key={url.id}>
                         <td className="short-url-cell">
                           <a 
-                            href={`/${url.slug}`} 
+                            href={url.shortUrl} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="short-url"
@@ -275,7 +283,7 @@ export default function Admin() {
                             {url.slug}
                           </a>
                           <button 
-                            onClick={() => copyToClipboard(`${window.location.origin}/${url.slug}`)}
+                            onClick={() => copyToClipboard(url.shortUrl)}
                             className="icon-btn"
                             title="Copy short URL"
                           >
@@ -283,7 +291,7 @@ export default function Admin() {
                           </button>
                         </td>
                         <td className="original-url">
-                          <span title={url.url}>{url.url}</span>
+                          <span title={url.url}>{url.url.length > 40 ? url.url.substring(0, 40) + '...' : url.url}</span>
                           <button 
                             onClick={() => copyToClipboard(url.url)}
                             className="icon-btn"
@@ -300,11 +308,11 @@ export default function Admin() {
                         </td>
                         <td className="actions">
                           <button 
-                            onClick={() => handleDelete(url.slug)}
+                            onClick={() => handleDelete(url.id)}
                             className="delete-btn"
                             title="Delete URL"
                           >
-                            🗑️ Delete
+                            🗑️
                           </button>
                         </td>
                       </tr>
@@ -366,6 +374,26 @@ export default function Admin() {
           font-size: 0.8rem;
           color: #666;
           text-transform: uppercase;
+        }
+
+        .header-actions {
+          display: flex;
+          gap: 1rem;
+        }
+
+        .delete-all-btn {
+          background: #ff6b6b;
+          color: white;
+          border: none;
+          padding: 0.75rem 1.5rem;
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: 600;
+          transition: background 0.3s ease;
+        }
+
+        .delete-all-btn:hover {
+          background: #ff5252;
         }
 
         .logout-btn {
@@ -453,7 +481,7 @@ export default function Admin() {
         }
 
         .original-url span {
-          max-width: 300px;
+          max-width: 200px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -467,6 +495,7 @@ export default function Admin() {
           padding: 0.25rem;
           border-radius: 4px;
           transition: background 0.3s ease;
+          font-size: 0.9rem;
         }
 
         .icon-btn:hover {
@@ -476,7 +505,7 @@ export default function Admin() {
         .clicks-badge {
           background: #667eea;
           color: white;
-          padding: 0.25rem 0.5rem;
+          padding: 0.25rem 0.75rem;
           border-radius: 20px;
           font-size: 0.8rem;
           font-weight: 600;
@@ -491,10 +520,9 @@ export default function Admin() {
           background: #dc3545;
           color: white;
           border: none;
-          padding: 0.5rem 1rem;
+          padding: 0.5rem;
           border-radius: 6px;
           cursor: pointer;
-          font-size: 0.9rem;
           transition: background 0.3s ease;
         }
 
@@ -510,6 +538,15 @@ export default function Admin() {
           
           .stats {
             gap: 1rem;
+          }
+          
+          .header-actions {
+            flex-direction: column;
+            width: 100%;
+          }
+          
+          .header-actions button {
+            width: 100%;
           }
           
           .admin-main {
