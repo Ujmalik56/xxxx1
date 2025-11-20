@@ -1,59 +1,80 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
+import { urlStorage } from '../lib/storage'
 
-export default function SlugRedirect() {
+export default function SlugRedirect({ urlData }) {
   const router = useRouter()
   const { slug } = router.query
 
   useEffect(() => {
-    if (slug) {
-      redirectToUrl(slug)
-    }
-  }, [slug])
-
-  const redirectToUrl = (slug) => {
-    try {
-      // Get URLs from localStorage
-      const savedUrls = localStorage.getItem('shortenedUrls')
-      if (!savedUrls) {
-        window.location.href = '/?error=URL+not+found'
-        return
-      }
-
-      const urls = JSON.parse(savedUrls)
-      const urlData = urls.find(u => u.slug === slug)
-
-      if (!urlData) {
-        window.location.href = '/?error=URL+not+found'
-        return
-      }
-
-      // Update click count
-      const updatedUrls = urls.map(url => 
-        url.slug === slug 
-          ? { ...url, clicks: (url.clicks || 0) + 1 }
-          : url
-      )
-      localStorage.setItem('shortenedUrls', JSON.stringify(updatedUrls))
-
-      // INSTANT REDIRECT - no loading screen
+    if (urlData) {
+      // Update click count and redirect
+      urlStorage.incrementClicks(slug)
       window.location.href = urlData.url
-
-    } catch (error) {
-      console.error('Redirect error:', error)
-      window.location.href = '/?error=Redirect+failed'
+    } else if (slug && !urlData) {
+      // Client-side fallback
+      const clientURL = urlStorage.findURLBySlug(slug)
+      if (clientURL) {
+        urlStorage.incrementClicks(slug)
+        window.location.href = clientURL.url
+      } else {
+        window.location.href = '/?error=URL+not+found'
+      }
     }
+  }, [slug, urlData])
+
+  if (!urlData) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white',
+        fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <h1>❌ URL Not Found</h1>
+          <p>The requested short URL was not found.</p>
+          <a 
+            href="/" 
+            style={{
+              color: 'white',
+              textDecoration: 'underline',
+              marginTop: '1rem',
+              display: 'inline-block'
+            }}
+          >
+            Go to Homepage
+          </a>
+        </div>
+      </div>
+    )
   }
 
   // Show nothing during redirect
   return (
-    <div style={{ 
-      display: 'none' 
-    }}>
+    <div style={{ display: 'none' }}>
       <Head>
-        <title>Redirecting...</title>
+        <title>Redirecting to {urlData.url}</title>
+        <meta name="robots" content="noindex, nofollow" />
       </Head>
     </div>
   )
+}
+
+// Server-side props for social media compatibility
+export async function getServerSideProps(context) {
+  const { slug } = context.params
+
+  // For server-side, we can't access localStorage, so we'll handle it client-side
+  // But we can set up proper meta tags for social media
+  
+  return {
+    props: {
+      urlData: null // Will be handled client-side
+    }
+  }
 }
