@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 
-const ADMIN_USERNAME = 'admin'
-const ADMIN_PASSWORD = 'admin123456'
+// Admin Credentials - Change these as per your requirement
+const ADMIN_CREDENTIALS = [
+  { email: 'umairatta307@gmail.com', password: 'JOYIA786@#$JOYIA' }
+  // Add more admin emails and passwords here
+]
 
 export default function Admin() {
   const [urls, setUrls] = useState([])
   const [loading, setLoading] = useState(false)
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [stats, setStats] = useState({ total: 0, totalClicks: 0 })
+  const [editingUrl, setEditingUrl] = useState(null)
+  const [newSlug, setNewSlug] = useState('')
+  const [newUrl, setNewUrl] = useState('')
 
   useEffect(() => {
     const auth = localStorage.getItem('adminAuth')
@@ -39,12 +45,19 @@ export default function Admin() {
 
   const handleLogin = (e) => {
     e.preventDefault()
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    
+    // Check if credentials match any admin
+    const isValidAdmin = ADMIN_CREDENTIALS.some(
+      admin => admin.email === email && admin.password === password
+    )
+
+    if (isValidAdmin) {
       setIsAuthenticated(true)
       localStorage.setItem('adminAuth', 'true')
+      localStorage.setItem('adminEmail', email)
       loadUrls()
     } else {
-      alert('❌ Invalid credentials!')
+      alert('❌ Invalid admin credentials!')
     }
   }
 
@@ -69,6 +82,58 @@ export default function Admin() {
     }
   }
 
+  const startEditing = (url) => {
+    setEditingUrl(url)
+    setNewSlug(url.slug)
+    setNewUrl(url.url)
+  }
+
+  const cancelEditing = () => {
+    setEditingUrl(null)
+    setNewSlug('')
+    setNewUrl('')
+  }
+
+  const handleUpdate = () => {
+    if (!newSlug || !newUrl) {
+      alert('❌ Slug and URL are required!')
+      return
+    }
+
+    // Check if new slug already exists (excluding current URL)
+    const slugExists = urls.some(url => 
+      url.slug === newSlug && url.id !== editingUrl.id
+    )
+
+    if (slugExists) {
+      alert('❌ This slug is already taken!')
+      return
+    }
+
+    try {
+      const updatedUrls = urls.map(url => 
+        url.id === editingUrl.id 
+          ? { 
+              ...url, 
+              slug: newSlug,
+              url: newUrl,
+              shortUrl: `${window.location.origin}/${newSlug}`
+            }
+          : url
+      )
+
+      setUrls(updatedUrls)
+      localStorage.setItem('shortenedUrls', JSON.stringify(updatedUrls))
+      setEditingUrl(null)
+      setNewSlug('')
+      setNewUrl('')
+      
+      alert('✅ URL updated successfully!')
+    } catch (error) {
+      alert('❌ Error updating URL')
+    }
+  }
+
   const handleDeleteAll = () => {
     if (confirm('⚠️ Are you sure you want to delete ALL URLs? This action cannot be undone.')) {
       try {
@@ -84,9 +149,10 @@ export default function Admin() {
 
   const handleLogout = () => {
     setIsAuthenticated(false)
-    setUsername('')
+    setEmail('')
     setPassword('')
     localStorage.removeItem('adminAuth')
+    localStorage.removeItem('adminEmail')
   }
 
   const copyToClipboard = (text) => {
@@ -104,15 +170,15 @@ export default function Admin() {
         <div className="login-container">
           <form onSubmit={handleLogin} className="login-form">
             <h2>🔐 Admin Login</h2>
-            <p className="login-info">Only authorized personnel can access this panel</p>
+            <p className="login-info">Only authorized administrators can access this panel</p>
             
             <div className="input-group">
-              <label>Username</label>
+              <label>Admin Email</label>
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter admin username"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter admin email"
                 required
               />
             </div>
@@ -129,8 +195,17 @@ export default function Admin() {
             </div>
             
             <button type="submit" className="login-btn">
-              🔑 Login
+              🔑 Login to Admin Panel
             </button>
+
+            <div className="demo-accounts">
+              <h4>Demo Admin Accounts:</h4>
+              {ADMIN_CREDENTIALS.map((admin, index) => (
+                <div key={index} className="demo-account">
+                  <strong>Email:</strong> {admin.email} | <strong>Password:</strong> {admin.password}
+                </div>
+              ))}
+            </div>
           </form>
         </div>
 
@@ -146,7 +221,7 @@ export default function Admin() {
 
           .login-container {
             width: 100%;
-            max-width: 400px;
+            max-width: 500px;
           }
 
           .login-form {
@@ -206,11 +281,31 @@ export default function Admin() {
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
+            margin-bottom: 1.5rem;
           }
 
           .login-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+          }
+
+          .demo-accounts {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #e1e5e9;
+          }
+
+          .demo-accounts h4 {
+            margin: 0 0 0.5rem 0;
+            color: #333;
+            font-size: 0.9rem;
+          }
+
+          .demo-account {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 0.25rem;
           }
         `}</style>
       </div>
@@ -225,7 +320,12 @@ export default function Admin() {
 
       <header className="admin-header">
         <div className="header-content">
-          <h1>🔧 Admin Panel</h1>
+          <div className="header-left">
+            <h1>🔧 Admin Panel</h1>
+            <span className="admin-email">
+              Logged in as: {localStorage.getItem('adminEmail')}
+            </span>
+          </div>
           <div className="stats">
             <div className="stat">
               <span className="stat-number">{stats.total}</span>
@@ -274,31 +374,57 @@ export default function Admin() {
                     {urls.map((url) => (
                       <tr key={url.id}>
                         <td className="short-url-cell">
-                          <a 
-                            href={url.shortUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="short-url"
-                          >
-                            {url.slug}
-                          </a>
-                          <button 
-                            onClick={() => copyToClipboard(url.shortUrl)}
-                            className="icon-btn"
-                            title="Copy short URL"
-                          >
-                            📋
-                          </button>
+                          {editingUrl?.id === url.id ? (
+                            <input
+                              type="text"
+                              value={newSlug}
+                              onChange={(e) => setNewSlug(e.target.value)}
+                              className="edit-input"
+                              placeholder="Enter new slug"
+                            />
+                          ) : (
+                            <>
+                              <a 
+                                href={url.shortUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="short-url"
+                              >
+                                {url.slug}
+                              </a>
+                              <button 
+                                onClick={() => copyToClipboard(url.shortUrl)}
+                                className="icon-btn"
+                                title="Copy short URL"
+                              >
+                                📋
+                              </button>
+                            </>
+                          )}
                         </td>
                         <td className="original-url">
-                          <span title={url.url}>{url.url.length > 40 ? url.url.substring(0, 40) + '...' : url.url}</span>
-                          <button 
-                            onClick={() => copyToClipboard(url.url)}
-                            className="icon-btn"
-                            title="Copy original URL"
-                          >
-                            📋
-                          </button>
+                          {editingUrl?.id === url.id ? (
+                            <input
+                              type="url"
+                              value={newUrl}
+                              onChange={(e) => setNewUrl(e.target.value)}
+                              className="edit-input"
+                              placeholder="Enter new URL"
+                            />
+                          ) : (
+                            <>
+                              <span title={url.url}>
+                                {url.url.length > 40 ? url.url.substring(0, 40) + '...' : url.url}
+                              </span>
+                              <button 
+                                onClick={() => copyToClipboard(url.url)}
+                                className="icon-btn"
+                                title="Copy original URL"
+                              >
+                                📋
+                              </button>
+                            </>
+                          )}
                         </td>
                         <td className="clicks">
                           <span className="clicks-badge">{url.clicks}</span>
@@ -307,13 +433,39 @@ export default function Admin() {
                           {new Date(url.createdAt).toLocaleDateString()}
                         </td>
                         <td className="actions">
-                          <button 
-                            onClick={() => handleDelete(url.id)}
-                            className="delete-btn"
-                            title="Delete URL"
-                          >
-                            🗑️
-                          </button>
+                          {editingUrl?.id === url.id ? (
+                            <div className="edit-actions">
+                              <button 
+                                onClick={handleUpdate}
+                                className="save-btn"
+                              >
+                                💾
+                              </button>
+                              <button 
+                                onClick={cancelEditing}
+                                className="cancel-btn"
+                              >
+                                ❌
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="action-buttons">
+                              <button 
+                                onClick={() => startEditing(url)}
+                                className="edit-btn"
+                                title="Edit URL"
+                              >
+                                ✏️
+                              </button>
+                              <button 
+                                onClick={() => handleDelete(url.id)}
+                                className="delete-btn"
+                                title="Delete URL"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -349,9 +501,20 @@ export default function Admin() {
           gap: 1rem;
         }
 
+        .header-left {
+          display: flex;
+          flex-direction: column;
+        }
+
         h1 {
           color: #333;
           margin: 0;
+        }
+
+        .admin-email {
+          font-size: 0.8rem;
+          color: #666;
+          margin-top: 0.25rem;
         }
 
         .stats {
@@ -488,6 +651,14 @@ export default function Admin() {
           display: block;
         }
 
+        .edit-input {
+          padding: 0.5rem;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          font-size: 0.9rem;
+          width: 100%;
+        }
+
         .icon-btn {
           background: none;
           border: none;
@@ -516,14 +687,54 @@ export default function Admin() {
           white-space: nowrap;
         }
 
-        .delete-btn {
-          background: #dc3545;
-          color: white;
+        .actions {
+          min-width: 120px;
+        }
+
+        .edit-actions, .action-buttons {
+          display: flex;
+          gap: 0.5rem;
+        }
+
+        .edit-btn, .save-btn, .cancel-btn, .delete-btn {
           border: none;
           padding: 0.5rem;
           border-radius: 6px;
           cursor: pointer;
           transition: background 0.3s ease;
+          font-size: 0.9rem;
+        }
+
+        .edit-btn {
+          background: #ffc107;
+          color: white;
+        }
+
+        .edit-btn:hover {
+          background: #e0a800;
+        }
+
+        .save-btn {
+          background: #28a745;
+          color: white;
+        }
+
+        .save-btn:hover {
+          background: #218838;
+        }
+
+        .cancel-btn {
+          background: #6c757d;
+          color: white;
+        }
+
+        .cancel-btn:hover {
+          background: #5a6268;
+        }
+
+        .delete-btn {
+          background: #dc3545;
+          color: white;
         }
 
         .delete-btn:hover {
