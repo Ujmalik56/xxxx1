@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import { customAlphabet } from 'nanoid'
+import { urlStorage } from '../lib/storage'
 
 const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 const nanoid = customAlphabet(alphabet, 6)
@@ -12,12 +13,18 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [urls, setUrls] = useState([])
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
-  // Load URLs from localStorage
+  // Load URLs from storage
   useEffect(() => {
-    const savedUrls = localStorage.getItem('shortenedUrls')
-    if (savedUrls) {
-      setUrls(JSON.parse(savedUrls))
+    const savedUrls = urlStorage.getURLs()
+    setUrls(savedUrls)
+    
+    // Check for error in URL parameters
+    const urlParams = new URLSearchParams(window.location.search)
+    const errorMsg = urlParams.get('error')
+    if (errorMsg) {
+      setError(decodeURIComponent(errorMsg))
     }
   }, [])
 
@@ -34,10 +41,16 @@ export default function Home() {
         return
       }
 
+      // Ensure URL has protocol
+      let finalUrl = url
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        finalUrl = 'https://' + url
+      }
+
       try {
-        new URL(url)
+        new URL(finalUrl)
       } catch (error) {
-        setError('Invalid URL format. Please include http:// or https://')
+        setError('Invalid URL format. Please enter a valid URL.')
         setLoading(false)
         return
       }
@@ -52,7 +65,7 @@ export default function Home() {
       }
 
       // Check if slug already exists
-      const existingUrl = urls.find(u => u.slug === finalSlug)
+      const existingUrl = urlStorage.findURLBySlug(finalSlug)
       if (existingUrl) {
         setError('This slug is already taken. Please choose a different one.')
         setLoading(false)
@@ -61,20 +74,16 @@ export default function Home() {
 
       // Create new URL object
       const newUrl = {
-        id: Date.now().toString(),
-        url: url,
+        url: finalUrl,
         slug: finalSlug,
-        clicks: 0,
-        createdAt: new Date().toISOString(),
         shortUrl: `${window.location.origin}/${finalSlug}`
       }
 
-      // Add to URLs list
-      const updatedUrls = [...urls, newUrl]
-      setUrls(updatedUrls)
-      localStorage.setItem('shortenedUrls', JSON.stringify(updatedUrls))
+      // Add to storage
+      const createdUrl = urlStorage.addURL(newUrl)
+      setUrls(urlStorage.getURLs())
 
-      setShortUrl(newUrl.shortUrl)
+      setShortUrl(createdUrl.shortUrl)
       setUrl('')
       setSlug('')
       
@@ -90,48 +99,76 @@ export default function Home() {
     alert('Copied to clipboard!')
   }
 
+  const shareOnFacebook = () => {
+    const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shortUrl)}`
+    window.open(shareUrl, '_blank', 'width=600,height=400')
+  }
+
+  const shareOnTwitter = () => {
+    const shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shortUrl)}&text=Check%20this%20link`
+    window.open(shareUrl, '_blank', 'width=600,height=400')
+  }
+
   return (
     <div className="container">
       <Head>
-        <title>URL Shortener - Short Your Links</title>
-        <meta name="description" content="Free URL shortener service" />
+        <title>Public URL Shortener - Free Link Shortening Service</title>
+        <meta name="description" content="Free public URL shortener service. Create short links instantly for social media, messaging, and more." />
+        <meta name="keywords" content="url shortener, link shortener, short links, free url shortener" />
+        <meta property="og:title" content="Public URL Shortener" />
+        <meta property="og:description" content="Free public URL shortener service for everyone" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={typeof window !== 'undefined' ? window.location.href : ''} />
       </Head>
 
       <main>
         <div className="header">
-          <h1>🚀 URL Shortener</h1>
-          <p>Shorten your long URLs instantly</p>
+          <h1>🌐 Public URL Shortener</h1>
+          <p>Create short links instantly - Perfect for Social Media & Sharing</p>
         </div>
         
         <form onSubmit={handleSubmit} className="url-form">
           <div className="input-group">
-            <label htmlFor="url">Enter Long URL *</label>
+            <label htmlFor="url">Enter Website URL *</label>
             <input
-              type="url"
+              type="text"
               id="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com/very-long-url-path"
+              placeholder="example.com or https://example.com"
               required
             />
+            <small>You can enter with or without https://</small>
           </div>
           
-          <div className="input-group">
-            <label htmlFor="slug">Custom Slug (Optional)</label>
-            <input
-              type="text"
-              id="slug"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="my-custom-link"
-              pattern="[a-zA-Z0-9-_]+"
-              title="Only letters, numbers, hyphens and underscores allowed"
-            />
-            <small>Leave empty for auto-generated slug</small>
+          <div className="advanced-section">
+            <button 
+              type="button" 
+              className="advanced-toggle"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              {showAdvanced ? '▼' : '▶'} Advanced Options
+            </button>
+            
+            {showAdvanced && (
+              <div className="input-group">
+                <label htmlFor="slug">Custom Short Code (Optional)</label>
+                <input
+                  type="text"
+                  id="slug"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  placeholder="my-link"
+                  pattern="[a-zA-Z0-9-_]+"
+                  title="Only letters, numbers, hyphens and underscores allowed"
+                />
+                <small>Leave empty for auto-generated code</small>
+              </div>
+            )}
           </div>
           
           <button type="submit" disabled={loading} className="submit-btn">
-            {loading ? '⏳ Shortening...' : '🔗 Shorten URL'}
+            {loading ? '⏳ Creating Short Link...' : '🔗 Create Short Link'}
           </button>
         </form>
 
@@ -143,7 +180,7 @@ export default function Home() {
 
         {shortUrl && (
           <div className="result">
-            <h3>✅ Your Short URL:</h3>
+            <h3>✅ Your Short Link is Ready!</h3>
             <div className="short-url-container">
               <a href={shortUrl} target="_blank" rel="noopener noreferrer" className="short-url">
                 {shortUrl}
@@ -152,27 +189,46 @@ export default function Home() {
                 📋 Copy
               </button>
             </div>
+            
+            <div className="share-buttons">
+              <p>Share on:</p>
+              <div className="share-buttons-container">
+                <button onClick={shareOnFacebook} className="share-btn facebook">
+                  📘 Facebook
+                </button>
+                <button onClick={shareOnTwitter} className="share-btn twitter">
+                  🐦 Twitter
+                </button>
+                <button onClick={copyToClipboard} className="share-btn copy">
+                  📋 Copy Link
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
         <div className="features">
-          <h3>✨ Features</h3>
+          <h3>✨ Why Use Our URL Shortener?</h3>
           <div className="feature-grid">
             <div className="feature">
+              <span>🌍</span>
+              <h4>Public & Free</h4>
+              <p>Completely free for everyone to use</p>
+            </div>
+            <div className="feature">
+              <span>📱</span>
+              <h4>Social Media Ready</h4>
+              <p>Perfect for Facebook, Twitter, Instagram</p>
+            </div>
+            <div className="feature">
               <span>⚡</span>
-              <p>Instant Redirect</p>
+              <h4>Instant Redirect</h4>
+              <p>No delays, direct to destination</p>
             </div>
             <div className="feature">
               <span>🔒</span>
-              <p>No Database Required</p>
-            </div>
-            <div className="feature">
-              <span>📊</span>
-              <p>Click Tracking</p>
-            </div>
-            <div className="feature">
-              <span>🎯</span>
-              <p>Custom slugs</p>
+              <h4>No Registration</h4>
+              <p>Start shortening links immediately</p>
             </div>
           </div>
         </div>
@@ -180,30 +236,62 @@ export default function Home() {
         {/* Recent URLs */}
         {urls.length > 0 && (
           <div className="recent-urls">
-            <h3>📝 Recently Shortened URLs</h3>
+            <h3>📝 Your Recent Short Links</h3>
             <div className="urls-list">
-              {urls.slice(-5).reverse().map((item) => (
+              {urls.slice(-10).reverse().map((item) => (
                 <div key={item.id} className="url-item">
                   <div className="url-info">
                     <a href={item.shortUrl} target="_blank" rel="noopener noreferrer" className="short">
                       {window.location.host}/{item.slug}
                     </a>
-                    <span className="clicks">👆 {item.clicks} clicks</span>
+                    <span className="clicks">👆 {item.clicks || 0} clicks</span>
                   </div>
                   <div className="original-url" title={item.url}>
-                    {item.url.length > 50 ? item.url.substring(0, 50) + '...' : item.url}
+                    {item.url.length > 60 ? item.url.substring(0, 60) + '...' : item.url}
+                  </div>
+                  <div className="url-actions">
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(item.shortUrl)}
+                      className="action-btn copy"
+                    >
+                      📋
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
         )}
+
+        {/* How to Use Section */}
+        <div className="how-to-use">
+          <h3>📖 How to Use</h3>
+          <div className="steps">
+            <div className="step">
+              <span>1</span>
+              <p>Enter your long URL above</p>
+            </div>
+            <div className="step">
+              <span>2</span>
+              <p>Click "Create Short Link"</p>
+            </div>
+            <div className="step">
+              <span>3</span>
+              <p>Copy and share your short link anywhere!</p>
+            </div>
+          </div>
+        </div>
       </main>
 
       <footer>
-        <p>
-          <a href="/admin" className="admin-link">🔧 Admin Panel</a>
-        </p>
+        <div className="footer-content">
+          <p>
+            <a href="/admin" className="admin-link">🔧 Admin Panel</a>
+          </p>
+          <p className="footer-note">
+            Free Public URL Shortener - Perfect for Social Media Sharing
+          </p>
+        </div>
       </footer>
 
       <style jsx>{`
@@ -226,7 +314,7 @@ export default function Home() {
           justify-content: center;
           align-items: center;
           width: 100%;
-          max-width: 500px;
+          max-width: 600px;
         }
 
         .header {
@@ -244,7 +332,7 @@ export default function Home() {
         }
 
         .header p {
-          font-size: 1.1rem;
+          font-size: 1.2rem;
           opacity: 0.9;
         }
 
@@ -290,6 +378,20 @@ export default function Home() {
           font-size: 0.8rem;
           margin-top: 0.25rem;
           display: block;
+        }
+
+        .advanced-section {
+          margin-bottom: 1.5rem;
+        }
+
+        .advanced-toggle {
+          background: none;
+          border: none;
+          color: #667eea;
+          cursor: pointer;
+          font-size: 0.9rem;
+          padding: 0.5rem 0;
+          font-weight: 600;
         }
 
         .submit-btn {
@@ -371,6 +473,53 @@ export default function Home() {
           background: #218838;
         }
 
+        .share-buttons {
+          margin-top: 1.5rem;
+          padding-top: 1rem;
+          border-top: 1px solid #e1e5e9;
+        }
+
+        .share-buttons p {
+          margin-bottom: 0.5rem;
+          color: #666;
+          font-size: 0.9rem;
+        }
+
+        .share-buttons-container {
+          display: flex;
+          gap: 0.5rem;
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+
+        .share-btn {
+          padding: 0.5rem 1rem;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: all 0.3s ease;
+        }
+
+        .share-btn.facebook {
+          background: #1877f2;
+          color: white;
+        }
+
+        .share-btn.twitter {
+          background: #1da1f2;
+          color: white;
+        }
+
+        .share-btn.copy {
+          background: #6c757d;
+          color: white;
+        }
+
+        .share-btn:hover {
+          transform: translateY(-1px);
+        }
+
         .features {
           text-align: center;
           color: white;
@@ -387,15 +536,26 @@ export default function Home() {
 
         .feature {
           background: rgba(255,255,255,0.1);
-          padding: 1rem;
+          padding: 1.5rem 1rem;
           border-radius: 10px;
           backdrop-filter: blur(10px);
         }
 
         .feature span {
-          font-size: 1.5rem;
+          font-size: 2rem;
           display: block;
           margin-bottom: 0.5rem;
+        }
+
+        .feature h4 {
+          margin: 0.5rem 0;
+          font-size: 1.1rem;
+        }
+
+        .feature p {
+          margin: 0;
+          font-size: 0.9rem;
+          opacity: 0.9;
         }
 
         .recent-urls {
@@ -404,6 +564,7 @@ export default function Home() {
           border-radius: 15px;
           box-shadow: 0 10px 30px rgba(0,0,0,0.1);
           width: 100%;
+          margin-bottom: 2rem;
         }
 
         .recent-urls h3 {
@@ -423,6 +584,7 @@ export default function Home() {
           border: 1px solid #e1e5e9;
           border-radius: 8px;
           background: #f8f9fa;
+          position: relative;
         }
 
         .url-info {
@@ -441,18 +603,91 @@ export default function Home() {
         .url-info .clicks {
           font-size: 0.8rem;
           color: #666;
+          background: #e9ecef;
+          padding: 0.25rem 0.5rem;
+          border-radius: 12px;
         }
 
         .original-url {
           font-size: 0.9rem;
           color: #666;
           word-break: break-all;
+          margin-bottom: 0.5rem;
+        }
+
+        .url-actions {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+        }
+
+        .action-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0.25rem;
+          border-radius: 4px;
+          transition: background 0.3s ease;
+        }
+
+        .action-btn:hover {
+          background: #e9ecef;
+        }
+
+        .how-to-use {
+          background: white;
+          padding: 1.5rem;
+          border-radius: 15px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+          width: 100%;
+          margin-bottom: 2rem;
+        }
+
+        .how-to-use h3 {
+          text-align: center;
+          margin-bottom: 1rem;
+          color: #333;
+        }
+
+        .steps {
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+        }
+
+        .step {
+          text-align: center;
+          flex: 1;
+        }
+
+        .step span {
+          display: block;
+          width: 2rem;
+          height: 2rem;
+          background: #667eea;
+          color: white;
+          border-radius: 50%;
+          line-height: 2rem;
+          margin: 0 auto 0.5rem auto;
+          font-weight: bold;
+        }
+
+        .step p {
+          margin: 0;
+          font-size: 0.9rem;
+          color: #666;
         }
 
         footer {
           padding: 2rem 0;
           color: white;
           text-align: center;
+          width: 100%;
+        }
+
+        .footer-content {
+          max-width: 600px;
+          margin: 0 auto;
         }
 
         .admin-link {
@@ -462,13 +697,20 @@ export default function Home() {
           padding: 0.5rem 1rem;
           border-radius: 20px;
           transition: background 0.3s ease;
+          display: inline-block;
+          margin-bottom: 1rem;
         }
 
         .admin-link:hover {
           background: rgba(255,255,255,0.3);
         }
 
-        @media (max-width: 600px) {
+        .footer-note {
+          opacity: 0.8;
+          font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
           .container {
             padding: 0 0.5rem;
           }
@@ -497,6 +739,29 @@ export default function Home() {
             flex-direction: column;
             align-items: flex-start;
             gap: 0.5rem;
+          }
+          
+          .steps {
+            flex-direction: column;
+            gap: 1rem;
+          }
+          
+          .share-buttons-container {
+            flex-direction: column;
+          }
+          
+          .share-btn {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .feature {
+            padding: 1rem 0.5rem;
+          }
+          
+          .feature span {
+            font-size: 1.5rem;
           }
         }
       `}</style>
