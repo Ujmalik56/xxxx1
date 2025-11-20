@@ -13,7 +13,7 @@ export default function Home() {
   const [error, setError] = useState('')
   const [urls, setUrls] = useState([])
 
-  // Load URLs from localStorage on component mount
+  // Load URLs from localStorage
   useEffect(() => {
     const savedUrls = localStorage.getItem('shortenedUrls')
     if (savedUrls) {
@@ -95,13 +95,12 @@ export default function Home() {
       <Head>
         <title>URL Shortener - Short Your Links</title>
         <meta name="description" content="Free URL shortener service" />
-        <link rel="icon" href="/favicon.ico" />
       </Head>
 
       <main>
         <div className="header">
           <h1>🚀 URL Shortener</h1>
-          <p>Shorten your long URLs instantly - No Database Required</p>
+          <p>Shorten your long URLs instantly</p>
         </div>
         
         <form onSubmit={handleSubmit} className="url-form">
@@ -153,7 +152,6 @@ export default function Home() {
                 📋 Copy
               </button>
             </div>
-            <p className="click-info">Click the link to test it!</p>
           </div>
         )}
 
@@ -162,15 +160,15 @@ export default function Home() {
           <div className="feature-grid">
             <div className="feature">
               <span>⚡</span>
-              <p>Instant URL shortening</p>
+              <p>Instant Redirect</p>
             </div>
             <div className="feature">
               <span>🔒</span>
               <p>No Database Required</p>
             </div>
             <div className="feature">
-              <span>💾</span>
-              <p>Local Storage</p>
+              <span>📊</span>
+              <p>Click Tracking</p>
             </div>
             <div className="feature">
               <span>🎯</span>
@@ -188,7 +186,7 @@ export default function Home() {
                 <div key={item.id} className="url-item">
                   <div className="url-info">
                     <a href={item.shortUrl} target="_blank" rel="noopener noreferrer" className="short">
-                      {item.slug}
+                      {window.location.host}/{item.slug}
                     </a>
                     <span className="clicks">👆 {item.clicks} clicks</span>
                   </div>
@@ -371,12 +369,6 @@ export default function Home() {
 
         .copy-btn:hover {
           background: #218838;
-        }
-
-        .click-info {
-          color: #666;
-          font-size: 0.9rem;
-          margin-top: 0.5rem;
         }
 
         .features {
